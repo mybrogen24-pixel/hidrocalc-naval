@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>HidroCalc Naval</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="editor.css">
+    <link rel="stylesheet" href="enhancements.css">
+    <link rel="stylesheet" href="redesign.css">
+    <link rel="stylesheet" href="visualizer.css?v=20260902a">
+  </head>
+  <body class="dark-theme">
+    <header class="app-shell-header">
+      <div class="project-switcher">
+        <span>Projeto atual</span>
+        <select id="projectSelect" aria-label="Projeto atual"><option>Casco em análise</option></select>
+      </div>
+      <div class="header-actions">
+        <button id="themeToggle" class="icon-button" aria-pressed="true" title="Alternar tema">☼</button>
+        <span id="status" class="status neutral">Aguardando cotas</span>
+      </div>
+    </header>
+
+    <nav class="tabbar" aria-label="Navegação principal">
+      <button class="tab-button active" data-tab="overview">Visão geral</button>
+      <button class="tab-button" data-tab="project">Projeto e cotas</button>
+      <button class="tab-button" data-tab="geometry">Geometria 3D</button>
+      <button class="tab-button" data-tab="hydro">Hidrostática</button>
+      <button class="tab-button" data-tab="curves">Curvas</button>
+      <button class="tab-button" data-tab="validation">Verificação</button>
+    </nav>
+
+    <main class="tab-main">
+      <section class="tab-panel active" data-tab-panel="overview">
+        <div class="tab-heading"><div><p class="eyebrow">VISÃO GERAL</p><h1>Análise hidrostática</h1><p>Importe a tabela de cotas, inspecione a geometria e gere resultados auditáveis.</p></div><button class="primary-action" data-open-tab="project">Importar cotas</button></div>
+        <div id="overviewMetrics" class="overview-metrics">
+          <article><span>Comprimento LBP</span><strong>—</strong><small>m</small></article>
+          <article><span>Boca B</span><strong>—</strong><small>m</small></article>
+          <article><span>Calado analisado</span><strong>—</strong><small>m</small></article>
+          <article><span>Deslocamento</span><strong>—</strong><small>t</small></article>
+          <article><span>Área molhada</span><strong>—</strong><small>m²</small></article>
+          <article><span>LCB</span><strong>—</strong><small>m</small></article>
+        </div>
+        <div class="overview-layout">
+          <article class="surface-card overview-preview">
+            <div class="card-title"><div><h2>Modelo 3D do casco</h2><p>Superfície e malha da tabela de cotas.</p></div><button class="tiny-button" data-open-tab="geometry">Abrir visualizador</button></div>
+            <canvas id="overview3dCanvas" class="zoomable-chart" data-chart-title="Modelo 3D ampliado" data-render="overview3d" width="900" height="430"></canvas>
+          </article>
+          <article class="surface-card steps-card">
+            <div class="card-title"><div><h2>Progresso técnico</h2><p id="projectProgressText">Carregue a tabela de cotas para iniciar.</p></div><strong id="projectProgressValue">0%</strong></div>
+            <div class="progress-track"><span id="projectProgressBar"></span></div>
+            <ul id="projectChecklist" class="project-checklist"></ul>
+          </article>
+        </div>
+      </section>
+
+      <section class="tab-panel" data-tab-panel="project">
+        <div class="tab-heading"><div><p class="eyebrow">ENTRADA</p><h1>Projeto e tabela de cotas</h1><p>Todos os dados são editáveis e ficam disponíveis para auditoria.</p></div><button id="openEditor" class="secondary-action">Criar / editar tabela</button></div>
+        <article id="entrada" class="surface-card">
+          <div class="form-grid modern-form">
+            <label>Embarcação<input id="shipName" value="Casco de estudo"></label>
+            <label>LBP (m)<input id="lbp" type="number" min="0" step="0.01" value="40"></label>
+            <label>Boca B (m)<input id="beam" type="number" min="0" step="0.01" value="8"></label>
+            <label>Pontal D (m)<input id="depth" type="number" min="0" step="0.01" value="5"></label>
+            <label>Calado de projeto Td (m)<input id="designDraft" type="number" min="0" step="0.01" value="3"></label>
+            <label>Densidade ρ (t/m³)<input id="density" type="number" min="0" step="0.001" value="1.025"></label>
+            <label>T mínimo (m)<input id="minDraft" type="number" min="0" step="0.1" value="0.5"></label>
+            <label>T máximo (m)<input id="maxDraft" type="number" min="0" step="0.1" value="4"></label>
+            <label>Incremento ΔT (m)<input id="draftStep" type="number" min="0.01" step="0.1" value="0.5"></label>
+            <label>Referência longitudinal<input id="longReference" value="A.P. / estação x = 0 m"></label>
+            <label>Referência vertical<input id="verticalReference" value="Referência vertical / z = 0 m"></label>
+            <label>Tolerância geométrica (%)<input id="geometryTolerance" type="number" min="0.01" step="0.1" value="2"></label>
+            <label>Fechamento de volume (%)<input id="volumeTolerance" type="number" min="0.01" step="0.1" value="1"></label>
+          </div>
+          <div class="closure-controls" aria-label="Fechamentos da geometria">
+            <div><strong>Fechamentos da representação 3D</strong><span>Automático fecha visualmente apenas as superfícies implícitas pelos offsets. A WSA só recebe fundo/espelhos quando estes forem escolhidos explicitamente como faixa/espelho.</span></div>
+            <label>Extremidade x mínima<select id="sternClosure"><option value="auto" selected>Automático</option><option value="pointed">Somente ponta / aberta</option><option value="transom">Forçar espelho (transom)</option></select></label>
+            <label>Extremidade x máxima<select id="bowClosure"><option value="auto" selected>Automático</option><option value="pointed">Somente ponta / aberta</option><option value="transom">Forçar espelho (transom)</option></select></label>
+            <label>Fechamento inferior<select id="bottomClosure"><option value="auto" selected>Automático (por painel)</option><option value="keel">Somente quilha</option><option value="flat">Forçar faixa inferior</option></select></label>
+          </div>
+          <div class="upload-zone">
+            <label class="file-label">Selecionar tabela<input id="fileInput" type="file" accept=".csv,.tsv,.txt,.dat,.xlsx,text/csv,text/tab-separated-values,text/plain,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"></label>
+            <button id="loadSample" class="secondary-action">Carregar exemplo</button>
+            <div><strong>CSV, TSV, TXT, DAT ou XLSX</strong><span>Reconhece listas, matrizes, transpostas e cabeçalhos multinível em português ou inglês.</span></div>
+          </div>
+          <div class="template-links"><a href="data/exemplo_cotas.csv" download>Baixar modelo em lista</a><a href="data/exemplo_cotas_matriz.csv" download>Baixar modelo em matriz</a><a href="data/teste_quilha_variavel.csv" download>Baixar teste de quilha variável</a></div>
+          <div id="inputSummary" class="input-summary">Nenhuma tabela recebida.</div>
+          <section id="importInterpretation" class="import-interpretation" hidden aria-live="polite">
+            <div class="import-interpretation-head"><div><strong>Importação detectada</strong><p id="importInterpretationStatus">Aguardando uma tabela.</p></div><div class="import-interpretation-actions"><button id="toggleImportDetails" type="button" class="tiny-button">Ver interpretação</button><button id="confirmImport" type="button" class="tiny-button" hidden>Confirmar importação</button><button id="openImportMapping" type="button" class="tiny-button">Corrigir mapeamento</button></div></div>
+            <div id="importInterpretationDetails" hidden>
+              <div id="importReport" class="import-report"></div>
+              <div class="import-preview-wrap"><table class="compact-table"><thead><tr><th>Baliza</th><th>X (m)</th><th>Z (m)</th><th>Semi-boca (m)</th></tr></thead><tbody id="importPreview"><tr><td colspan="4">Nenhuma prévia disponível.</td></tr></tbody></table></div>
+            </div>
+            <div id="importMappingPanel" class="import-mapping" hidden>
+              <h3>Mapeamento assistido</h3><p>Use esta etapa somente quando a interpretação automática precisar de correção. Nenhum offset é preenchido sem uma escolha explícita.</p>
+              <div class="import-mapping-grid"><label>Formato<select id="importManualFormat"><option value="station-x-matrix">Matriz baliza + X × Z</option><option value="list">Lista X, Z, semi-boca</option></select></label><label>Rótulo da baliza<select id="importLabelColumn"></select></label><label>Posição X<select id="importXColumn"></select></label><label><span id="importZMappingLabel">Linha dos níveis Z</span><select id="importZHeaderRow"></select></label><label><span id="importOffsetMappingLabel">Primeira coluna de offsets</span><select id="importOffsetStartColumn"></select></label><label>Primeira linha de dados<select id="importDataStartRow"></select></label><label>Valores de boca<select id="importBreadthType"><option value="half">Semi-boca</option><option value="full">Boca completa</option></select></label><label>Unidade X<select id="importXUnit"><option value="m">m</option><option value="mm">mm</option><option value="cm">cm</option><option value="ft">ft</option><option value="in">in</option></select></label><label>Unidade Z<select id="importZUnit"><option value="m">m</option><option value="mm">mm</option><option value="cm">cm</option><option value="ft">ft</option><option value="in">in</option></select></label><label>Unidade Y<select id="importBreadthUnit"><option value="m">m</option><option value="mm">mm</option><option value="cm">cm</option><option value="ft">ft</option><option value="in">in</option></select></label><label>Células vazias<select id="importMissingPolicy"><option value="missing">Manter como ausentes</option><option value="interpolate">Interpolar no núcleo, quando aplicável</option><option value="outside">Considerar fora do domínio</option><option value="zero">Considerar zero (explícito)</option></select></label></div>
+              <div class="import-mapping-actions"><button id="applyImportMapping" type="button" class="tiny-button">Aplicar mapeamento</button><span id="importMappingStatus"></span></div>
+            </div>
+          </section>
+          <div id="validation" class="message">Aguardando dados geométricos.</div>
+        </article>
+      </section>
+
+      <section class="tab-panel" data-tab-panel="geometry">
+        <div class="tab-heading"><div><p class="eyebrow">VISUALIZAÇÃO</p><h1>Geometria da embarcação</h1><p>Gire, selecione balizas e linhas d'água, ou altere a forma de exibição.</p></div><div id="coordinateReadout" class="coordinate-readout">x: — · y: — · z: —</div></div>
+        <article class="surface-card model-viewer-card">
+          <div class="viewer-toolbar viewer-toolbar-expanded">
+            <div class="viewer-primary-controls"><label>Modo<select id="viewMode"><option value="surfaceCurves" selected>Superfície + curvas</option><option value="surface">Superfície</option><option value="curves">Somente curvas</option><option value="wire">Curvas completas</option><optgroup label="Diagnóstico"><option value="xray">X-ray</option><option value="debug">Depuração geométrica</option></optgroup></select></label><label>Projeção<select id="projectionMode"><option value="perspective" selected>Perspectiva</option><option value="orthographic">Ortográfica</option></select></label></div>
+            <div class="viewer-toggles" aria-label="Camadas de visualização"><label><input id="showKeel" type="checkbox" checked> Quilha</label><label><input id="showChine" type="checkbox" checked> Chine</label><label><input id="showSheer" type="checkbox" checked> Sheer</label><label><input id="showStations" type="checkbox" checked> Balizas</label><label><input id="showWaterlines" type="checkbox" checked> Linhas d’água</label><label><input id="showLongitudinals" type="checkbox"> Longitudinais paramétricas</label><label><input id="showOffsets" type="checkbox"> Offsets</label><label><input id="showWaterplane" type="checkbox"> Plano d’água</label></div>
+            <details class="viewer-advanced"><summary>Detalhes de visualização</summary><div class="viewer-advanced-content"><label>Resolução<select id="renderResolution"><option value="low">Baixa</option><option value="medium" selected>Média</option><option value="high">Alta</option></select></label><label>Fairing visual<select id="renderFairing"><option value="auto" selected>Automático</option><option value="smooth">Suave (PCHIP)</option><option value="hardChine">Quinas vivas / barcaça</option></select></label><label>Escala visual<select id="visualScale"><option value="real">Real</option><option value="naval" selected>Naval</option><option value="inspection">Inspeção</option></select></label><div class="viewer-toggles viewer-toggles-advanced"><label><input id="showGrid" type="checkbox"> Grade</label><label><input id="showAxes" type="checkbox"> Vetores globais</label></div><div class="viewer-density" aria-label="Densidade das linhas"><strong>Densidade das linhas</strong><label>Balizas <input id="stationDensity" type="range" min="0" max="100" step="5" value="25"><output id="stationDensityValue">25%</output></label><label>Linhas d’água <input id="waterlineDensity" type="range" min="0" max="100" step="5" value="25"><output id="waterlineDensityValue">25%</output></label><label>Longitudinais <input id="longitudinalDensity" type="range" min="0" max="100" step="5" value="10"><output id="longitudinalDensityValue">10%</output></label></div></div></details>
+            <div class="view-buttons"><button data-view="perspective">Perspectiva</button><button data-view="isometric">Isométrica</button><button data-view="top">Topo</button><button data-view="port">Lateral BB</button><button data-view="starboard">Lateral BE</button><button data-view="bow">Proa</button><button data-view="stern">Popa</button><button data-view="front">Frente</button><button id="fitHull" type="button">Enquadrar casco</button><button data-view="reset">Redefinir vista</button></div>
+            <div class="viewer-status"><span id="waterplaneReadout">Plano d’água: T = —</span><span>Esquerdo: orbitar · scroll: zoom · direito/Shift: pan · duplo clique: enquadrar</span></div>
+          </div>
+          <div class="viewer-canvas-wrap"><canvas id="hull3dCanvas" class="zoomable-chart" data-chart-title="Casco 3D ampliado" data-render="hull3d" width="1300" height="620"></canvas><canvas class="orientation-gizmo" aria-label="Triedro de orientação XYZ"></canvas><div class="viewer-error-overlay" role="status" aria-live="polite"></div></div>
+          <div class="selection-bars">
+            <div><strong>Linhas d'água</strong><div id="waterlineSelectors" class="selection-chips"><span>Carregue as cotas.</span></div></div>
+            <div><strong>Balizas</strong><div id="stationSelectors" class="selection-chips"><span>Carregue as cotas.</span></div></div>
+          </div>
+          <div id="renderQuality" class="render-quality">Carregue uma tabela para gerar a representação visual.</div>
+          <p id="viewerPerformance" class="viewer-performance">Renderização 3D: aguardando uma malha.</p>
+        </article>
+        <div class="geometry-grid">
+          <article class="surface-card"><div class="card-title"><div><h2>Plano de linhas d'água</h2><p>Vista de topo · BE (+y) e BB (−y).</p></div></div><div class="plot-toolbar geometry-plan-toolbar"><label>Representação<select id="waterlineCurveMode"><option value="smooth" selected>Suave visual</option><option value="linear">Linear pelos offsets</option></select></label><label>Proporção<select id="waterlineAspectMode"><option value="real" selected>Real 1:1</option><option value="fit">Ajustar à janela</option></select></label></div><canvas id="geometryCanvas" class="zoomable-chart" data-chart-title="Plano de linhas d'água ampliado" data-render="plan" width="700" height="370"></canvas><p id="planMeta" class="plot-meta">Aguardando geometria.</p></article>
+          <article class="surface-card"><div class="card-title"><div><h2>Plano de balizas</h2><p id="bodyPlanSubtitle">Vista frontal da estação selecionada.</p></div></div><div class="plot-toolbar geometry-plan-toolbar body-plan-toolbar"><label>Visualização<select id="bodyPlanMode" class="body-plan-mode-select"><option value="single" selected>Individual</option><option value="all">Todas sobrepostas</option><option value="traditional">Body Plan tradicional</option></select></label><label><span id="bodyPlanStationLabel">Baliza</span><select id="sectionStation" disabled></select></label><label>Representação<select id="planCurveMode"><option value="smooth" selected>Suave visual</option><option value="linear">Linear pelos offsets</option></select></label><label>Proporção<select id="bodyAspectMode"><option value="real" selected>Real 1:1</option><option value="fit">Ajustar à janela</option></select></label><label>Referência<select id="bodyVerticalReference"><option value="global" selected>z global</option><option value="local">Quilha local</option></select></label><label>Orientação<select id="bodyLongitudinalOrientation"><option value="min-stern" selected>x mínimo = popa</option><option value="min-bow">x mínimo = proa</option></select></label><label class="body-offset-toggle"><input id="showBodyOffsets" type="checkbox"> Mostrar offsets originais</label></div><canvas id="bodyPlanCanvas" class="zoomable-chart" data-chart-title="Plano de balizas ampliado" data-render="body" width="700" height="370"></canvas><p id="bodyPlanMeta" class="plot-meta">Aguardando geometria.</p></article>
+          <article class="surface-card"><div class="card-title"><div><h2>Plano de Linhas do Alto</h2><p>Buttocks reais · interseções do casco por planos Y constantes.</p></div></div><div class="plot-toolbar geometry-plan-toolbar buttock-plan-toolbar"><label>Representação<select id="buttockCurveMode"><option value="smooth" selected>Suave visual</option><option value="linear">Linear / offsets</option></select></label><label>Proporção<select id="buttockAspectMode"><option value="real" selected>Real 1:1</option><option value="fit">Ajustar à janela</option></select></label><label>Quantidade<select id="buttockDensity"><option value="auto" selected>Automático</option><option value="few">Poucos</option><option value="medium">Médio</option><option value="many">Muitos</option></select></label><label class="body-offset-toggle"><input id="showButtockPoints" type="checkbox"> Interseções</label></div><canvas id="buttockCanvas" class="zoomable-chart" data-chart-title="Plano de Linhas do Alto ampliado" data-render="buttock" width="700" height="370"></canvas><p id="buttockMeta" class="plot-meta">Aguardando geometria.</p></article>
+        </div>
+        <div id="geometryMeta" class="geometry-meta">Carregue uma tabela válida para visualizar a geometria.</div>
+        <article class="surface-card section-diagnostics-card">
+          <div class="card-title"><div><h2>Diagnóstico das seções transversais</h2><p>O 3D usa apenas os offsets e interpolações lineares mostrados abaixo; não fecha um fundo sem dados.</p></div></div>
+          <div class="table-wrap"><table class="compact-table section-diagnostics-table"><thead><tr><th>Estação</th><th>z mínimo (m)</th><th>Semi-boca no mínimo (m)</th><th>Fecha na linha de centro</th><th>Largura no fundo (m)</th><th>Fundo na malha 3D</th><th>Topo</th><th>Popa</th><th>Proa</th><th>Diagnóstico</th></tr></thead><tbody id="sectionDiagnostics"><tr><td colspan="10">Carregue uma tabela válida para diagnosticar as seções.</td></tr></tbody></table></div>
+        </article>
+      </section>
+
+      <section class="tab-panel" data-tab-panel="hydro">
+        <div class="tab-heading"><div><p class="eyebrow">CÁLCULO</p><h1>Hidrostática</h1><p>Calcule uma condição, audite os passos e exporte a tabela completa.</p></div></div>
+        <article id="calculo" class="surface-card calculation-bar">
+          <label>Calado analisado (m)<input id="selectedDraft" type="number" min="0" step="0.1" value="3"></label>
+          <button id="calculate" class="primary-action">Calcular calado</button>
+          <button id="calculateTable" class="secondary-action">Gerar Hydrostatic Table</button>
+          <button id="exportTable" class="secondary-action" disabled>Exportar CSV</button>
+          <button id="exportXlsx" class="secondary-action" disabled>Exportar Excel (.xlsx)</button>
+        </article>
+        <article id="resultados" class="surface-card">
+          <div class="card-title"><div><h2>Resultado do calado</h2><p id="resultCaption">Nenhum cálculo executado.</p></div></div>
+          <div id="results" class="cards empty">Carregue os dados e calcule.</div>
+        </article>
+        <article id="auditoria" class="surface-card">
+          <div class="card-title"><div><h2>Mostrar cálculo</h2><p>Dados, fórmula, integração e valores intermediários.</p></div><select id="auditProperty" disabled></select></div>
+          <div id="audit" class="audit empty">A auditoria aparecerá após o cálculo.</div>
+        </article>
+        <article id="tabela" class="surface-card">
+          <div class="card-title"><div><h2>Hydrostatic Table</h2><p>Todos os resultados têm unidades explícitas.</p></div></div>
+          <div class="table-wrap hydro-table-viewport"><table id="hydroTable"><thead></thead><tbody></tbody></table></div>
+        </article>
+      </section>
+
+      <section class="tab-panel" data-tab-panel="curves">
+        <div class="tab-heading"><div><p class="eyebrow">RESULTADOS GRÁFICOS</p><h1>Curvas hidrostáticas</h1><p>Diagrama combinado com escalas e curvas individuais por propriedade.</p></div></div>
+        <article class="surface-card combined-curve-card"><div class="card-title"><div><h2>Diagrama hidrostático combinado</h2><p id="curveCaption">Gere a tabela para visualizar as curvas escaladas.</p></div><div class="chart-export-actions"><button id="exportCurvePng" class="tiny-button" disabled>Exportar PNG</button><button id="exportCurvePdf" class="tiny-button" disabled>Exportar PDF</button></div></div><canvas id="curveCanvas" class="zoomable-chart inspectable-chart" data-chart-title="Diagrama hidrostático ampliado" data-render="combined" width="980" height="540"></canvas></article>
+        <article class="surface-card individual-curve-card"><div class="card-title"><div><h2>Curva individual</h2><p>Selecione uma propriedade: todos os calados calculados permanecem disponíveis no gráfico, tooltip e exportação.</p></div><div class="individual-curve-controls"><label>Propriedade<select id="individualCurveProperty" disabled aria-label="Propriedade da curva individual"></select></label><div class="chart-export-actions"><button id="exportIndividualCurvePng" class="tiny-button" disabled>Exportar PNG</button><button id="exportIndividualCurvePdf" class="tiny-button" disabled>Exportar PDF</button></div></div></div><div id="individualCurves" class="individual-curves"><p id="individualCurveEmpty" class="empty">Gere a Hydrostatic Table para exibir a curva selecionada.</p><canvas id="individualCurveCanvas" class="zoomable-chart inspectable-chart" data-render="individual" data-chart-title="Curva hidrostática individual ampliada" width="980" height="340" hidden></canvas></div></article>
+      </section>
+
+      <section class="tab-panel" data-tab-panel="validation">
+        <div class="tab-heading"><div><p class="eyebrow">VALIDAÇÃO</p><h1>Verificação e consistência</h1><p>Controle de qualidade dos dados, interpolação e teste analítico.</p></div></div>
+        <article id="verificacao" class="surface-card">
+          <div class="verification-grid">
+            <article class="verification-card"><h3>Verificação do modelo</h3><table class="compact-table"><tbody id="consistencyTable"><tr><td>Execute um cálculo para verificar.</td></tr></tbody></table></article>
+            <article class="verification-card"><h3>Dados interpolados</h3><p id="interpolationSummary">Nenhuma interpolação registrada.</p><div class="interpolation-wrap"><table class="compact-table"><thead><tr><th>Estação</th><th>z (m)</th><th>Método / pontos</th><th>α</th><th>Semi-boca (m)</th></tr></thead><tbody id="interpolationTable"><tr><td colspan="5">—</td></tr></tbody></table></div></article>
+          </div>
+          <div class="barge-validation"><div><h3>Validação analítica · barcaça paralelepipédica</h3><p>Compara o núcleo numérico do app com fórmulas analíticas.</p></div><label>L (m)<input id="bargeL" type="number" min="0.01" step="0.1" value="40"></label><label>B (m)<input id="bargeB" type="number" min="0.01" step="0.1" value="8"></label><label>T (m)<input id="bargeT" type="number" min="0.01" step="0.1" value="3"></label><button id="runBargeValidation" class="secondary-action">Executar validação</button></div>
+          <div class="table-wrap validation-table-wrap"><table id="bargeTable"><thead></thead><tbody><tr><td>Execute a validação analítica.</td></tr></tbody></table></div>
+          <div class="validation-actions"><button id="runSelfTests" class="secondary-action">Executar testes analíticos</button><button id="runConvergence" class="secondary-action">Testar convergência da geometria atual</button><span id="selfTestSummary">Os testes usam geometrias sintéticas e não alteram suas cotas.</span></div>
+          <div class="verification-grid extended-verification">
+            <article class="verification-card"><h3>Testes analíticos automatizados</h3><div class="interpolation-wrap"><table class="compact-table" id="selfTestTable"><thead><tr><th>Teste</th><th>Propriedade</th><th>Calculado</th><th>Esperado</th><th>Erro (%)</th><th>Status</th></tr></thead><tbody><tr><td colspan="6">Execute os testes analíticos.</td></tr></tbody></table></div></article>
+            <article class="verification-card"><h3>Convergência por subdivisão linear</h3><p>A malha original é comparada com uma versão refinada por interpolação; os offsets originais não são modificados.</p><div class="interpolation-wrap"><table class="compact-table" id="convergenceTable"><thead><tr><th>Propriedade</th><th>Original</th><th>Refinada</th><th>Variação (%)</th></tr></thead><tbody><tr><td colspan="4">Carregue as cotas e execute o teste.</td></tr></tbody></table></div></article>
+          </div>
+          <article class="maxsurf-validation">
+            <div class="card-title"><div><h2>Validação com Maxsurf</h2><p>Insira ou importe resultados externos. A tolerância é declarada aqui e não é inferida pelo aplicativo.</p></div><div class="maxsurf-actions"><label>Tolerância (%)<input id="maxsurfTolerance" type="number" min="0" step="0.1" value="2"></label><label class="tiny-button file-input-button">Importar CSV<input id="maxsurfCsvInput" type="file" accept=".csv,text/csv"></label><button id="exportMaxsurfCsv" class="tiny-button" disabled>CSV</button><button id="exportMaxsurfXlsx" class="tiny-button" disabled>XLSX</button></div></div>
+            <p class="maxsurf-format">CSV aceito: <code>condition,draft,property,value</code>, com condições <code>low</code>, <code>intermediate</code> e <code>design</code>.</p>
+            <div id="maxsurfComparison" class="maxsurf-comparison"><p class="empty">Carregue uma geometria e gere as condições de comparação.</p></div>
+          </article>
+        </article>
+      </section>
+    </main>
+
+    <div id="chartModal" class="chart-modal" role="dialog" aria-modal="true" aria-labelledby="chartModalTitle" hidden>
+      <div class="chart-modal-backdrop" data-close-modal></div>
+      <div class="chart-modal-content">
+        <div class="chart-modal-head"><h2 id="chartModalTitle">Gráfico ampliado</h2><button id="closeChartModal" class="modal-close" aria-label="Fechar gráfico ampliado">×</button></div>
+        <canvas id="expandedCanvas" width="1600" height="900"></canvas>
+        <p>Pressione <kbd>Esc</kbd> ou clique fora para fechar.</p>
+      </div>
+    </div>
+    <div id="offsetEditorModal" class="chart-modal" role="dialog" aria-modal="true" aria-labelledby="offsetEditorTitle" hidden>
+      <div class="chart-modal-backdrop" data-close-editor></div>
+      <div class="chart-modal-content editor-modal-content">
+        <div class="chart-modal-head"><div><h2 id="offsetEditorTitle">Editor de tabela de cotas</h2><p>Estações nas linhas; linhas d'água nos cabeçalhos; células com semi-bocas em metros.</p></div><button id="closeOffsetEditor" class="modal-close" aria-label="Fechar editor de cotas">×</button></div>
+        <div class="editor-controls"><label>Estações<input id="editorStationCount" type="number" min="2" max="80" value="9"></label><label>Linhas d'água<input id="editorLevelCount" type="number" min="2" max="80" value="5"></label><button id="createEditorGrid" class="secondary-action">Gerar grade</button><span>Edite diretamente os valores e confirme ao final.</span></div>
+        <div class="editor-grid-wrap"><table id="offsetEditorGrid" class="offset-editor-grid"></table></div>
+        <div class="editor-actions"><button id="applyOffsetEditor" class="primary-action">Aplicar tabela</button><button id="cancelOffsetEditor" class="secondary-action">Cancelar</button></div>
+      </div>
+    </div>
+    <div id="curveTooltip" class="curve-tooltip" role="status" hidden></div>
+<script src="viewer3d.js?v=20260830s"></script>
+<script src="vendor/pako_inflate.min.js?v=2.1.0a"></script>
+<script src="offset-importer.js?v=20260902j"></script>
+<script src="app.js?v=20260902i"></script>
+  </body>
+</html>
