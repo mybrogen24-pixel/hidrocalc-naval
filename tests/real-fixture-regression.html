@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Testes de fixtures — HidroCalc</title>
+  <style>
+    :root{color-scheme:dark}body{margin:0;padding:24px;background:#0b1625;color:#dcecff;font:14px system-ui,sans-serif}main{max-width:1100px;margin:auto}h1{margin-bottom:6px}p{color:#a9bed4}button,a{display:inline-block;border:1px solid #2e79ad;border-radius:7px;padding:9px 13px;background:#123755;color:#e6f5ff;text-decoration:none;cursor:pointer}button:disabled{opacity:.55;cursor:wait}.actions{display:flex;gap:10px;margin:20px 0}.notice{padding:12px;border:1px solid #31506d;border-radius:8px;background:#10243a}.warning{border-color:#a06b2f;color:#ffd79d}table{width:100%;border-collapse:collapse;margin-top:18px;background:#0e2034}th,td{padding:8px;border:1px solid #28435d;text-align:left;vertical-align:top}th{background:#142c45}.ok{color:#73e2b3}.error{color:#ff9eae}pre{white-space:pre-wrap;max-height:420px;overflow:auto;padding:12px;border:1px solid #28435d;border-radius:8px;background:#08111d}iframe{display:none}
+  </style>
+</head>
+<body>
+<main>
+  <h1>Testes de fixtures do HidroCalc</h1>
+  <p>Esta é uma página separada de desenvolvimento. Nenhum teste é executado automaticamente e ela não faz parte do boot do aplicativo.</p>
+  <div class="actions"><a href="../index.html">Abrir o aplicativo</a><button id="runFixtures" type="button">Executar fixtures manualmente</button></div>
+  <div id="status" class="notice">Aguardando execução manual.</div>
+  <table aria-label="Resultados dos fixtures"><thead><tr><th>Fixture</th><th>URL solicitada</th><th>Status</th><th>response.ok</th><th>Resultado / erro</th></tr></thead><tbody id="results"><tr><td colspan="5">Nenhuma requisição realizada.</td></tr></tbody></table>
+  <details><summary>Relatório técnico completo</summary><pre id="report">[]</pre></details>
+  <iframe id="app" title="Aplicativo isolado para os testes"></iframe>
+</main>
+<script>
+  const fixtures=[
+    ['VLCC canônico','/Downloads/VLCC_320K_offsets_APP.csv','csv'],
+    ['VLCC matriz','/Downloads/VLCC_320K_matriz_semantica.csv','csv'],
+    ['Barcaça','/Downloads/Tabela%20de%20cotas%20Barca%C3%A7a.csv','csv'],
+    ['Cargo','/Downloads/cargo_ship_offset_HydroCalc.csv','csv'],
+    ['Ferry RoRo','/Downloads/ferry_roro_offset_HydroCalc.csv','csv'],
+    ['Benchmark 40×8×4','/Downloads/Benchmark_HidroCalc_40x8x4.xlsx','xlsx'],
+    ['Caixa 40×8×5','/Downloads/embarcacao_caixa_40x8x5_COMPLETA.xlsx','xlsx'],
+    ['Tabela de cotas ARQ2','/Downloads/TABELADECOTASARQ2.xlsx','xlsx']
+  ];
+  const compact=(entry,payload,report,preflight)=>Object.assign(entry,{
+    parser:payload.importInfo.type,decision:payload.importInfo.decision,units:payload.importInfo.units,
+    stations:payload.importInfo.stationCount,levels:payload.importInfo.levelCount,offsets:payload.importInfo.pointCount,
+    missing:payload.importInfo.emptyCount,geometry:report.geometry.valid,hullKind:report.render?.hullKind||'—',hullStyle:report.render?.hullStyle||null,spikes:report.render?.spikeVertices||0,triangles:report.render?.triangles||0,
+    preflightTriangles:preflight?.triangles||0,waterlineSegments:report.waterlines?.segments||0,bodySections:report.bodyPlan?.sections||0,
+    longitudinal:report.longitudinal?.finite||false,viewerReady:report.viewerReady,failures:report.failures
+  });
+  const escapeHtml=value=>String(value??'').replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
+  const render=results=>{
+    document.getElementById('results').innerHTML=results.map(item=>'<tr><td>'+escapeHtml(item.name)+'</td><td>'+escapeHtml(item.url)+'</td><td>'+escapeHtml(item.status??'—')+'</td><td class="'+(item.ok?'ok':'error')+'">'+escapeHtml(item.ok)+'</td><td class="'+(item.error?'error':'ok')+'">'+escapeHtml(item.error||('Geometria '+(item.geometry?'válida':'inválida')+' · '+item.triangles+' triângulos'))+'</td></tr>').join('');
+    document.getElementById('report').textContent=JSON.stringify(results,null,2);
+  };
+  const loadApp=()=>new Promise((resolve,reject)=>{
+    const frame=document.getElementById('app');
+    frame.addEventListener('load',()=>resolve(frame.contentWindow),{once:true});
+    frame.addEventListener('error',()=>reject(new Error('Falha ao carregar ../index.html no iframe de teste.')),{once:true});
+    frame.src='../index.html';
+  });
+  document.getElementById('runFixtures').addEventListener('click',async event=>{
+    const button=event.currentTarget,status=document.getElementById('status');
+    if(location.protocol==='file:'){
+      status.className='notice warning';
+      status.textContent='O runner de fixtures requer um servidor local para obter status HTTP. O aplicativo principal continua disponível pelo link acima e não executa estes testes.';
+      return;
+    }
+    button.disabled=true;status.className='notice';status.textContent='Carregando o aplicativo isolado e verificando os caminhos…';
+    const results=[];
+    try{
+      const app=await loadApp();
+      if(!app.HydroOffsetImporter||!app.HydroCalcDebug)throw new Error('APIs de diagnóstico não disponíveis no aplicativo isolado.');
+      for(const [name,path,type] of fixtures){
+        const url=new URL(path,location.href).href,entry={name,url,status:null,ok:false,error:null};
+        try{
+          const response=await fetch(url);entry.status=response.status;entry.ok=response.ok;
+          if(!response.ok)throw new Error('HTTP '+response.status+' '+response.statusText);
+          const payload=type==='xlsx'
+            ?await app.HydroOffsetImporter.parseXlsx(new app.File([await response.blob()],decodeURIComponent(url.split('/').at(-1)),{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}))
+            :app.HydroOffsetImporter.parseText(await response.text(),{sheetName:'CSV'});
+          const report=app.HydroCalcDebug.diagnoseHullPipeline(payload),preflight=app.HydroCalcDebug.preflightImport(payload);
+          compact(entry,payload,report,preflight);
+        }catch(error){entry.error=String(error?.message||error);}
+        results.push(entry);render(results);
+      }
+      status.textContent='Execução manual encerrada: '+results.filter(item=>item.ok&&!item.error).length+' de '+results.length+' fixtures acessíveis e processados.';
+    }catch(error){status.className='notice warning';status.textContent=String(error?.message||error);}
+    finally{button.disabled=false;}
+  });
+</script>
+</body>
+</html>
